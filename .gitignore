@@ -1,0 +1,12 @@
+# build outputs
+/mac68k
+/mac68k.exe
+*.o
+out.s
+mac68k-*/
+*.tar.gz
+*.zip
+
+# prebuilt upstream Windows binary is kept for reference; ignore stray builds
+*.dSYM/
+.DS_Store

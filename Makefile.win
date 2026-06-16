@@ -1,0 +1,29 @@
+# Project: Projet1
+# Makefile created by Dev-C++ 4.9.8.5
+
+CPP  = g++.exe
+CC   = gcc.exe
+WINDRES = windres.exe
+RES  = 
+OBJ  = main.o $(RES)
+LINKOBJ  = main.o $(RES)
+LIBS =  -L"D:/PRGTION/DevWin/Dev-Cpp/lib" 
+INCS =  -I"D:/PRGTION/DevWin/Dev-Cpp/include" 
+CXXINCS =  -I"D:/PRGTION/DevWin/Dev-Cpp/include/c++"  -I"D:/PRGTION/DevWin/Dev-Cpp/include/c++/mingw32"  -I"D:/PRGTION/DevWin/Dev-Cpp/include/c++/backward"  -I"D:/PRGTION/DevWin/Dev-Cpp/include" 
+BIN  = maccer68k.exe
+CXXFLAGS = $(CXXINCS) 
+CFLAGS = $(INCS)-DVERSION=2.6 -DVERSION_STRING=\"2.6\"  
+
+.PHONY: all all-before all-after clean clean-custom
+
+all: all-before maccer68k.exe all-after
+
+
+clean: clean-custom
+	rm -f $(OBJ) $(BIN)
+
+$(BIN): $(OBJ)
+	$(CC) $(LINKOBJ) -o "maccer68k.exe" $(LIBS)
+
+main.o: main.c
+	$(CC) -c main.c -o main.o $(CFLAGS)

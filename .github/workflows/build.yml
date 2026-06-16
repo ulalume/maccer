@@ -1,0 +1,105 @@
+name: build
+
+# Build the maccer / mac68k macro pre-processor natively for every platform
+# SGDK targets. The SGDK makefiles invoke this tool as `mac68k` (see common.mk:
+# `MACCER := mac68k`), so the produced binary is named `mac68k` (`mac68k.exe`
+# on Windows) regardless of the upstream "maccer" name.
+#
+# maccer is GPLv2 (Michael Hope 1998, Kaneda 2005). We ship the source, COPYING
+# and original README alongside every binary to satisfy the license.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required to attach assets to a release on tag push
+
+env:
+  # Bump these when the vendored source changes. Used for the -D defines that
+  # main.c requires (it won't compile without VERSION_STRING / KMOD_VERSION).
+  MACCER_VERSION: "0.26"
+  KMOD_VERSION: "0.2"
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64,   runner: ubuntu-latest }
+          - { name: linux-arm64,    runner: ubuntu-24.04-arm }
+          - { name: macos-arm64,    runner: macos-14, arch: arm64 }
+          - { name: macos-x86_64,   runner: macos-14, arch: x86_64 }   # cross from arm64 runner, no Intel runner needed
+          - { name: windows-x86_64, runner: ubuntu-latest, mingw: x86_64-w64-mingw32-gcc, apt: gcc-mingw-w64-x86-64, ext: ".exe" }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mingw toolchain (Windows target only)
+        if: ${{ matrix.apt != '' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt }}
+
+      - name: Build mac68k
+        shell: bash
+        run: |
+          set -ex   # note: no -u, so an empty bash array expands cleanly on bash 3.2 (macOS)
+          OUT="mac68k${{ matrix.ext }}"
+          ARCHFLAGS=()
+          case "${{ matrix.name }}" in
+            windows-*) CC="${{ matrix.mingw }}" ;;
+            macos-*)   CC="cc"; ARCHFLAGS=(-arch "${{ matrix.arch }}") ;;
+            *)         CC="cc" ;;
+          esac
+          # main.c requires VERSION_STRING and KMOD_VERSION as string literals.
+          "$CC" -O2 -Wall "${ARCHFLAGS[@]}" \
+            -DVERSION="${MACCER_VERSION}" \
+            -DVERSION_STRING="\"${MACCER_VERSION}\"" \
+            -DKMOD_VERSION="\"${KMOD_VERSION}\"" \
+            -o "$OUT" main.c -lm
+          file "$OUT" || true
+
+      - name: Smoke test (native targets only)
+        if: ${{ matrix.mingw == '' && matrix.arch != 'x86_64' }}
+        run: |
+          set -eux
+          # macros in test-1.ms expand without a real binary include file;
+          # we just confirm the binary runs and produces output.
+          ./mac68k -o out.s test-1.ms || true
+          test -s out.s
+          head -n 5 out.s
+
+      - name: Package
+        id: pkg
+        run: |
+          set -eux
+          DIST="mac68k-${{ matrix.name }}"
+          mkdir -p "$DIST"
+          cp "mac68k${{ matrix.ext }}" "$DIST"/
+          cp COPYING README README_KMod ChangeLog "$DIST"/
+          if [ -n "${{ matrix.ext }}" ]; then
+            zip -r "$DIST.zip" "$DIST"
+            echo "asset=$DIST.zip" >> "$GITHUB_OUTPUT"
+          else
+            tar czf "$DIST.tar.gz" "$DIST"
+            echo "asset=$DIST.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac68k-${{ matrix.name }}
+          path: ${{ steps.pkg.outputs.asset }}
+
+      - name: Attach to release (tag push only)
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pkg.outputs.asset }}
