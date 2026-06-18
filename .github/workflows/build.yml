@@ -32,8 +32,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: linux-x86_64,   runner: ubuntu-latest }
-          - { name: linux-arm64,    runner: ubuntu-24.04-arm }
+          # Linux: build in manylinux2014 (glibc 2.17) so mac68k runs on old distros too.
+          - { name: linux-x86_64,   runner: ubuntu-latest,    container: "quay.io/pypa/manylinux2014_x86_64" }
+          - { name: linux-arm64,    runner: ubuntu-24.04-arm, container: "quay.io/pypa/manylinux2014_aarch64" }
           - { name: macos-arm64,    runner: macos-14, arch: arm64 }
           - { name: macos-x86_64,   runner: macos-14, arch: x86_64 }   # cross from arm64 runner, no Intel runner needed
           - { name: windows-x86_64, runner: ubuntu-latest, mingw: x86_64-w64-mingw32-gcc, apt: gcc-mingw-w64-x86-64, ext: ".exe" }
@@ -47,7 +48,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.apt }}
 
-      - name: Build mac68k
+      - name: Build mac68k (macOS / Windows-cross — host)
+        if: ${{ matrix.container == '' }}
         shell: bash
         run: |
           set -ex   # note: no -u, so an empty bash array expands cleanly on bash 3.2 (macOS)
@@ -56,7 +58,6 @@ jobs:
           case "${{ matrix.name }}" in
             windows-*) CC="${{ matrix.mingw }}" ;;
             macos-*)   CC="cc"; ARCHFLAGS=(-arch "${{ matrix.arch }}") ;;
-            *)         CC="cc" ;;
           esac
           # main.c requires VERSION_STRING and KMOD_VERSION as string literals.
           "$CC" -O2 -Wall "${ARCHFLAGS[@]}" \
@@ -65,6 +66,24 @@ jobs:
             -DKMOD_VERSION="\"${KMOD_VERSION}\"" \
             -o "$OUT" main.c -lm
           file "$OUT" || true
+
+      # Linux: build inside manylinux2014 (glibc 2.17). The 0755 binary is world-readable, so the
+      # host Smoke-test/Package steps can run/copy it without a chown.
+      - name: Build mac68k (Linux in manylinux2014)
+        if: ${{ matrix.container != '' }}
+        shell: bash
+        run: |
+          set -ex
+          docker run --rm -e MACCER_VERSION -e KMOD_VERSION -v "$PWD:$PWD" -w "$PWD" \
+            "${{ matrix.container }}" bash -euxc '
+              gcc -O2 -Wall \
+                -DVERSION="${MACCER_VERSION}" \
+                -DVERSION_STRING="\"${MACCER_VERSION}\"" \
+                -DKMOD_VERSION="\"${KMOD_VERSION}\"" \
+                -o mac68k main.c -lm
+            '
+          file mac68k || true
+          echo "glibc floor: $(objdump -T mac68k 2>/dev/null | grep -oE 'GLIBC_[0-9.]+' | sort -V | tail -1)"
 
       - name: Smoke test (native targets only)
         if: ${{ matrix.mingw == '' && matrix.arch != 'x86_64' }}
