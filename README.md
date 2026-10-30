@@ -55,8 +55,8 @@ cc -O2 -Wall \
 |---|---|---|
 | linux-x86_64   | `ubuntu-latest`     | native |
 | linux-arm64    | `ubuntu-24.04-arm`  | native |
-| macos-arm64    | `macos-14`          | native, linker ad-hoc signed |
-| macos-x86_64   | `macos-14`          | `-arch x86_64` cross-build (no Intel runner needed) |
+| macos-arm64    | `macos-15`          | native, linker ad-hoc signed |
+| macos-x86_64   | `macos-15`          | `-arch x86_64` cross-build (no Intel runner needed) |
 | windows-x86_64 | `ubuntu-latest`     | `x86_64-w64-mingw32-gcc` cross-build |
 
 - **Push / PR** → builds and uploads workflow artifacts (CI check).
